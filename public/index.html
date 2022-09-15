@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+
+<style> 
+/* remove extra spacing around elements so we can fill the available page */
+* { margin: 0; } 
+</style>
+</head>
+<body>
+    <script type="module">
+        // import the Three.js module:
+        import * as THREE from "https://unpkg.com/three@0.126.0/build/three.module.js";
+        
+        import { GLTFLoader } from "https://unpkg.com/three@0.126.0/examples/jsm/loaders/GLTFLoader.js";
+        import { OrbitControls } from 'https://unpkg.com/three@0.126.0/examples/jsm/controls/OrbitControls.js';
+        //import { Stats } from 'https://unpkg.com/three@0.126.0/examples/jsm/libs/stats.module';
+        // console.log(MyModule);
+        //MyModule.react();
+        // create a renderer with better than default quality:
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+        
+        // create a perspective camera
+        const camera = new THREE.PerspectiveCamera( 
+            45,  // this camera has a 75 degree field of view in the vertical axis
+            window.innerWidth / window.innerHeight, // the aspect ratio matches the size of the window
+            0.1, // anything less than 5cm from the eye will not be drawn
+            50  // anything more than 100m from the eye will not be drawn
+        );
+        // position the camera 2m in the Z axis and 1.5m in the Y axis
+        // the Y axis points up from the ground
+        // the Z axis point out of the screen toward you
+        //
+        camera.position.z = 3;
+        
+        window.addEventListener(
+          "resize",
+          function () {
+            // ensure the renderer fills the page, and the camera aspect ratio matches:
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+          },
+          false
+        );
+        const controls = new OrbitControls(camera, renderer.domElement);
+        // create the root of a scene graph
+        const scene = new THREE.Scene();
+        
+        const hemiLight = new THREE.HemisphereLight(0x999999, 0x333333, 1);
+        hemiLight.position.set(10, 10, 10);
+        scene.add(hemiLight);
+        
+        const clock = new THREE.Clock();
+        // const stats = new Stats();
+        // document.body.appendChild(stats.domElement);
+        
+        
+          let chemicalSystem, geometry;
+          //reaction constants// level of ability of each chem to react
+          const k1 = 1;
+          const k2=2;
+          const k3=1;
+          const k4=1;
+          const k5=1;
+          const k6=0.5
+          const k7=0.5;
+          const k8=1;
+        
+        // initial concentrations for the set of chemicals:
+        let chems = [0.5,0.5,0.5,0.5];
+        
+        
+         // unpack chemical array into local variables:
+        //let [a,b,c,e]= chems;
+        let numchems=chems.length;
+        
+        geometry = new THREE.BufferGeometry();
+        const positions =[numchems * 3];
+        const colors =[];
+        const sizes =new Float32Array( numchems );
+        
+        const vertex = new THREE.Vector3();
+        const color = new THREE.Color();
+        
+        for (let i= 0; i<chems.length; i++){
+          let c = chems[i];
+          let t = i/numchems;
+          vertex.x= Math.sin(Math.PI *2 *t);
+          vertex.y = Math.cos(Math.PI *2 *t);
+          vertex.z = 0.02;
+          vertex.toArray( positions, i * 3 );
+          color.setHSL(t, 1.0,0.5);
+          colors.push(color.r, color.g, color.b);
+          // clamp c between 0 and 10 to prevent blowups in renderer:
+          let radius = Math.sqrt(Math.min(10, Math.max(0, c)) / Math.PI);
+          sizes[i] = radius;
+          
+        }
+        
+        geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( positions, 3 ) );
+        geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
+        geometry.setAttribute( 'size', new THREE.Float32BufferAttribute( sizes, 1 ).setUsage( THREE.DynamicDrawUsage ) );
+        
+        const chemMaterial= new THREE.PointsMaterial({color:0xffeefe});
+        chemicalSystem= new THREE.Points(geometry,chemMaterial);
+        scene.add(chemicalSystem);
+        
+        function animate(dt) {
+          //stats.update();
+          //MyModule.react();
+          // get current timing:
+          const dtclock = clock.getDelta();
+          const t = clock.getElapsedTime();
+             for (let i = 0; i < dtclock * 500000; i++) {
+                let[a,b,c,e] = chems;
+          
+          //delta changes of each chemical:
+          let da =0,
+              db =0,
+              dc =0,
+              de =0;
+          //timestep for chemical, needs to be very small  or else dynamics break.
+          let dt=0.00001;
+        
+          //Reaction Rules:
+          //A => 2A @rate k1
+          da+=k1*a;
+          //A + B => 2B @rate k2
+          da+= -k2*a*b;
+          db+= k2*a*b;
+          db+= k2*a*b;    
+            // B => .          @rate k3
+          db += -k3 * b;
+        
+          // C appears when B is in low supply
+          // -B => C        @rate k4
+          dc += (k4 * 1) / b;
+          // C => .         @rate k5
+          dc += -k5 * c;
+        
+          //D appears when B+C=>. @rate k6
+          de += (k6 * 1) / (c * b);
+          //D =>.          @rate k7
+          de += -k6 * e;
+          // D =2D
+          de += (k7 * 1) / c;
+          
+          //apply changes:
+          a += da * dt;
+          b += db * dt;
+          c += dc * dt;
+          e += de * dt;
+          //update chemical array:
+          chems = [a, b, c, e];
+          } 
+          //console.log(chems);
+          //update(dt);
+          // const sizes = geometry.attributes.size.array;
+          // for (let i =0;  i<numchems; i++){
+          //   sizes[i]=  10 * ( 1 + Math.sin( 0.1 * i + t ) );
+          // }
+           // sizes = [];
+          for (let i= 0; i<chems.length; i++){
+          let c = chems[i];
+            let t = i/numchems;
+            let radius = Math.sqrt(Math.min(10, Math.max(0, c)) / Math.PI);
+          sizes[i] = radius;
+               
+          }
+          //console.log(sizes) 
+          chemicalSystem.material.size = sizes[0];  
+        // console.log(chemicalSystem.material.size)
+          //console.log(sizes)
+          // const sizes = [a, b, c, e];
+          // const [first] = sizes;
+          // console.log(first);
+          // geometry.attributes.size.array[1] = sizes[...chems.length];
+          // console.log(sizes);
+        
+          // chemMaterial.size = sizes[0, 1, 2, 3];
+        
+         // console.log(chemicalSystem.geometry.attributes.position);
+          let [a, b, c, e] = chems;
+          // console.log(chemicalSystem.material.size);
+          const time = Date.now() * 0.005;
+        const geometry = chemicalSystem.geometry;
+                        const attributes = geometry.attributes;
+        
+                        for ( let i = 0; i < attributes.size.array.length; i ++ ) {
+        
+                            attributes.size.array[ i ] = 14 + 13 * Math.sin( 0.1 * i + time );
+        
+                        }
+        
+                        attributes.size.needsUpdate = true;
+          // console.log(chemicalSystem.material.size);
+          // geometry.attributes.size.needsUpdate = true;
+          // chemicalSystem.material.size.needsUpdate = true;
+          
+          // draw the scene:
+          renderer.render(scene, camera);
+        }
+        // start!
+        renderer.setAnimationLoop(animate);
+        
+
+//our client/ starting our connection
+//location containts a package of information related to the path of our file
+let addr = location.origin.replace(/^http/, 'ws');
+let socket = new WebSocket(addr);
+
+socket.onopen = function(data){
+    console.log("I connected to the server")
+    // let chemvalue = Math.abs(sizes[0])+20;
+    // const str = ' ';
+    let seriallvalue= Math.floor(sizes[0]*100 +'l');
+    let serialmvalue = 'n'
+    //str.concat(chemvalue, 'l')
+    socket.send(seriallvalue)
+    socket.send(serialmvalue)
+
+
+    console.log(seriallvalue);
+}
+function sendingchems (data){
+  console.log("I received a message");
+let singlechem=[] 
+singlechem= Math.floor(sizes[0]*100);
+let whatsc= singlechem + 'l'
+socket.send(whatsc)
+}
+socket.onmessage = sendingchems;
+ 
+// // Every second, send an OSC message to SuperCollider
+
+// setInterval(function(data) {
+//   var msg = {
+//       address: "/message",
+//       args: [Math.floor(sizes[0]*100)]
+//   };
+
+//   console.log("Sending message", msg.address, msg.args, "to", udpPort.options.remoteAddress + ":" + udpPort.options.remotePort);
+//   udpPort.send(msg);
+// }, 1000);
+</script>
+</body>
+</html>
